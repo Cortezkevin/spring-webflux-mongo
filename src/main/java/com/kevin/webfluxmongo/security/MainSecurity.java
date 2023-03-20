@@ -29,9 +29,9 @@ public class MainSecurity {
         return http
                 .exceptionHandling()
                 .authenticationEntryPoint((swe, e) ->
-                        Mono.fromRunnable(() -> swe.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED))
+                        Mono.fromRunnable(() -> swe.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED))  //controlar las excepciones al obtener el token
                 ).accessDeniedHandler((swe, e) ->
-                        Mono.fromRunnable(() -> swe.getResponse().setStatusCode(HttpStatus.FORBIDDEN))
+                        Mono.fromRunnable(() -> swe.getResponse().setStatusCode(HttpStatus.FORBIDDEN)) // controlar el error de acceso denegado
                 ).and()
                 .csrf().disable()
                 .formLogin().disable()

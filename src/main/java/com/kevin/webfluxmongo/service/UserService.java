@@ -1,13 +1,12 @@
 package com.kevin.webfluxmongo.service;
 
 import com.kevin.webfluxmongo.documents.User;
-import com.kevin.webfluxmongo.dto.LoginUserDTO;
-import com.kevin.webfluxmongo.dto.NewUserDTO;
-import com.kevin.webfluxmongo.dto.ResponseDTO;
-import com.kevin.webfluxmongo.dto.UpdateUserDTO;
+import com.kevin.webfluxmongo.dto.*;
 import com.kevin.webfluxmongo.exception.CustomException;
 import com.kevin.webfluxmongo.repository.UserRepository;
 import com.kevin.webfluxmongo.security.enums.RolName;
+import com.kevin.webfluxmongo.security.jwt.JwtProvider;
+import com.kevin.webfluxmongo.security.model.MainUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -26,6 +25,7 @@ public class UserService {
 
     private final PasswordEncoder passwordEncoder;
     private final UserRepository repository;
+    private final JwtProvider jwtProvider;
 
     public Flux<User> getAll(){
         return repository.findAll();
@@ -42,29 +42,48 @@ public class UserService {
                 );
     }
 
-    public Mono<User> create( NewUserDTO u){
+    public Mono<ResponseDTO> create( NewUserDTO u){
         List<RolName> newUserRoles = new ArrayList<>();
-        if( u.getRoles() != null && u.getRoles().contains("admin")){
-            newUserRoles.add(RolName.ROLE_ADMIN);
-        }
-        newUserRoles.add(RolName.ROLE_USER);
-        User newUser = User.builder().username(u.getUsername()).email(u.getEmail()).password(u.getPassword()).roles(newUserRoles).build();
-        System.out.println(newUser.toString());
-        return repository.save( newUser );
+        return repository.existsByUsername( u.getUsername() ).flatMap( existsUsername ->
+                !existsUsername
+                        ? repository.existsByEmail( u.getEmail() ).flatMap( existsEmail -> {
+                            if( existsEmail ) return Mono.error( new CustomException( HttpStatus.BAD_REQUEST ,u.getEmail() + " already in use"));
+                            if( u.getRoles() != null && u.getRoles().contains("admin")){
+                                newUserRoles.add(RolName.ROLE_ADMIN);
+                            }
+                            newUserRoles.add(RolName.ROLE_USER);
+                            User newUser = User.builder()
+                                    .username(u.getUsername())
+                                    .email(u.getEmail())
+                                    .password(passwordEncoder.encode(u.getPassword()))
+                                    .roles(newUserRoles).build();
+                            return repository.save( newUser ).map( user -> new ResponseDTO( "User Registered Successfully", newUser ) );
+                        })
+                        : Mono.error( new CustomException( HttpStatus.BAD_REQUEST ,u.getUsername() + " already in use")));
     }
 
-    public Mono<ResponseDTO> login(LoginUserDTO user){
-        Mono<Boolean> existsUsername = repository.existsByUsername(user.getUsername());
-        return existsUsername.flatMap( exists ->
-                    exists
-                    ? repository.findByUsername(user.getUsername()).flatMap( u -> {
-                        if( u.getPassword().equals(user.getPassword())){
-                            return Mono.just(new ResponseDTO("User logged successfully", u));
-                        }
-                        return Mono.error(new CustomException(HttpStatus.BAD_REQUEST, "Password is invalid"));
-                    })
-                    : Mono.error(new CustomException(HttpStatus.BAD_REQUEST, "Username is invalid"))
-                );
+    public Mono<ResponseDTO> login(LoginUserDTO loginUserDTO){
+        return repository.findByUsername(loginUserDTO.getUsername()).flatMap( user -> {
+                    if( !passwordEncoder.matches(loginUserDTO.getPassword(), user.getPassword())) return Mono.error(new CustomException(HttpStatus.BAD_REQUEST, "Invalid Credentials"));
+                    String token = jwtProvider.generateToken( MainUser.build( user ) );
+                    JwtDTO jwtDTO = new JwtDTO( token, user );
+                    return Mono.just(new ResponseDTO("User logged successfully", jwtDTO));
+                })
+                .switchIfEmpty( Mono.error(new CustomException(HttpStatus.BAD_REQUEST, "Invalid Credentials")) );
+    }
+
+    public Mono<ResponseDTO> changePassword(ChangePasswordDTO dto){
+        return repository.findByTokenPassword( dto.getTokenPassword() )
+                .flatMap( user -> {
+                    if( dto.getPassword().equals( dto.getConfirmPassword())){
+                        user.setPassword( passwordEncoder.encode( dto.getPassword()) );
+                        user.setTokenPassword( null );
+                        return repository.save( user ).flatMap( userUpdated -> Mono.just( new ResponseDTO("Password updated", null) ));
+                    }else {
+                        return Mono.error( new CustomException(HttpStatus.BAD_REQUEST, "The passwords not matches"));
+                    }
+                })
+                .switchIfEmpty( Mono.error( new CustomException(HttpStatus.BAD_REQUEST, "The token is not valid")));
     }
 
     public Mono<User> update( UpdateUserDTO u, String id ){
