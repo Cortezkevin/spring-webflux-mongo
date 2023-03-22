@@ -37,7 +37,7 @@ public class ExceptionAttributes extends DefaultErrorAttributes {
         }
         if( throwable instanceof SignatureException){
             SignatureException signatureException = ( SignatureException ) throwable;
-            errorAttributes.put("message", "The token have a invalid signature");
+            errorAttributes.put("message", "The token is invalid");
             errorAttributes.put("status", HttpStatus.BAD_REQUEST);
         }
         if( throwable instanceof MalformedJwtException){
@@ -47,7 +47,7 @@ public class ExceptionAttributes extends DefaultErrorAttributes {
         }
         if( throwable instanceof ExpiredJwtException){
             ExpiredJwtException expiredJwtException = ( ExpiredJwtException ) throwable;
-            errorAttributes.put("message", expiredJwtException.getMessage());
+            errorAttributes.put("message", "The session is expired");
             errorAttributes.put("status", HttpStatus.BAD_REQUEST);
         }
         return errorAttributes;

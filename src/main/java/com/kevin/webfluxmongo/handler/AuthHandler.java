@@ -1,5 +1,6 @@
 package com.kevin.webfluxmongo.handler;
 
+import com.kevin.webfluxmongo.documents.User;
 import com.kevin.webfluxmongo.dto.*;
 import com.kevin.webfluxmongo.security.jwt.JwtProvider;
 import com.kevin.webfluxmongo.service.EmailService;
@@ -8,30 +9,22 @@ import com.kevin.webfluxmongo.validation.ObjectValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
-
-import java.util.HashMap;
-import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
 public class AuthHandler {
 
-    private final JwtProvider jwtProvider;
     private final ObjectValidator validator;
     private final UserService service;
     private final EmailService emailService;
 
-    public Mono<ServerResponse> verifyToken(ServerRequest req){
-        String token = req.pathVariable("token");
-        Boolean isValid = jwtProvider.validateToken( token );
-        Map<String, Object> res = new HashMap<>();
-        res.put("success", true);
-        res.put("message", "Valid Token");
-        return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(BodyInserters.fromValue(res));
+    public Mono<ServerResponse> getUserFromToken(ServerRequest req){
+        String header = req.headers().header("Authorization").get(0);
+        String token = header.substring(7);
+        return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body( service.getUserFromToken(token), User.class);
     }
 
     public Mono<ServerResponse> create(ServerRequest req){

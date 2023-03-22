@@ -42,6 +42,11 @@ public class UserService {
                 );
     }
 
+    public Mono<User> getUserFromToken(String token){
+         String username = jwtProvider.getUserNameFromToken( token );
+         return repository.findByUsername( username );
+    }
+
     public Mono<ResponseDTO> create( NewUserDTO u){
         List<RolName> newUserRoles = new ArrayList<>();
         return repository.existsByUsername( u.getUsername() ).flatMap( existsUsername ->
