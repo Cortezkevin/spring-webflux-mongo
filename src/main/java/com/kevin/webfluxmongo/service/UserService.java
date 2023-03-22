@@ -32,14 +32,8 @@ public class UserService {
     }
 
     public Mono<User> getById( String id ){
-        Mono<User> findUser = repository.findById( id );
-        Mono<Boolean> existsUser = findUser.hasElement();
-
-        return existsUser.flatMap( exists ->
-                    exists
-                    ? findUser
-                    : Mono.error( new CustomException( HttpStatus.NOT_FOUND ,"User not found with id " + id ))
-                );
+        return repository.findById( id )
+                .switchIfEmpty( Mono.error( new CustomException( HttpStatus.NOT_FOUND ,"User not found with id " + id )) );
     }
 
     public Mono<User> getUserFromToken(String token){
@@ -122,12 +116,10 @@ public class UserService {
                 .switchIfEmpty( Mono.error( new CustomException( HttpStatus.NOT_FOUND ,"User not found with id " + id )) );
     }
 
-    public Mono<Void> delete( String id ){
-        return repository.findById( id ).hasElement()
-                .flatMap( existsUser ->
-                        existsUser
-                                ? repository.deleteById( id )
-                                : Mono.error( new CustomException( HttpStatus.NOT_FOUND ,"User not found with id " + id )));
+    public Mono<ResponseDTO> delete( String id ){
+        return repository.findById( id )
+                .flatMap( user -> repository.deleteById( user.getId() ).then( Mono.just( new ResponseDTO("User delted successfully", null)) ))
+                .switchIfEmpty( Mono.error( new CustomException( HttpStatus.NOT_FOUND ,"User not found with id " + id )) );
     }
 
     public Mono<User> getByUsername(String username){

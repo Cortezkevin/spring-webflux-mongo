@@ -25,64 +25,41 @@ public class NoteService {
     private final UserRepository userRepository;
 
     public Mono<Note> create( SaveNoteDTO n, String userId){
-        Mono<User> findUser = userRepository.findById(userId);
-        Mono<Boolean> existsUser = findUser.hasElement();
-
-        return existsUser.flatMap( exists ->
-                    exists
-                    ? findUser.flatMap(
-                        user -> repository.save(
-                            Note.builder()
-                                .createdAt(new Date().getTime())
-                                .userId(userId)
-                                .title(n.getTitle())
-                                .body(n.getBody())
-                                .build())
-                            )
-                        : Mono.error(new CustomException( HttpStatus.NOT_FOUND ,"User not found with id "+ userId))
-                );
+        return userRepository.findById( userId )
+                .flatMap( user -> repository.save( Note.builder()
+                        .createdAt(new Date().getTime())
+                        .userId(userId)
+                        .title(n.getTitle())
+                        .body(n.getBody())
+                        .build())
+                )
+                .switchIfEmpty( Mono.error(new CustomException( HttpStatus.NOT_FOUND ,"User not found with id "+ userId)) );
     }
 
     public Mono<Note> update(SaveNoteDTO n, String noteId, String userId){
-        Mono<Boolean> existsUser = userRepository.findById(userId).hasElement();
-        Mono<Note> findNote = repository.findById(noteId);
-        Mono<Boolean> existsNote = findNote.hasElement();
-
-        return existsUser.flatMap( exists ->
-                    exists
-                        ? existsNote.flatMap( e ->
-                            e
-                                ? findNote.flatMap( note -> {
-                                    note.setTitle(n.getTitle() != null ? n.getTitle() : note.getTitle() );
-                                    note.setBody(n.getBody() != null ? n.getBody() : note.getBody() );
-                                    note.setUpdateAt( new Date().getTime());
-                                    return repository.save( note );
-                                })
-                                : Mono.error(new CustomException( HttpStatus.NOT_FOUND ,"Note not found"))
-                            )
-                        : Mono.error(new CustomException( HttpStatus.NOT_FOUND ,"User not found"))
-                );
+        return userRepository.findById( userId )
+                .flatMap( user -> repository.findById( noteId )
+                        .flatMap( note ->  {
+                            note.setTitle(n.getTitle() != null ? n.getTitle() : note.getTitle() );
+                            note.setBody(n.getBody() != null ? n.getBody() : note.getBody() );
+                            note.setUpdateAt( new Date().getTime());
+                            return repository.save( note );
+                        })
+                        .switchIfEmpty( Mono.error(new CustomException( HttpStatus.NOT_FOUND ,"Note not found with id "+ noteId)) )
+                )
+                .switchIfEmpty( Mono.error(new CustomException( HttpStatus.NOT_FOUND ,"User not found with id "+ userId)) );
     }
 
-
     public Flux<Note> getByUserId(String userId){
-        Mono<User> findUser = userRepository.findById(userId);
-        Mono<Boolean> existsUser = findUser.hasElement();
-
-        return existsUser.flatMapMany( exists ->
-                    exists
-                    ? repository.findByUserId(userId)
-                    : Mono.error(new CustomException( HttpStatus.NOT_FOUND ,"User not found with id "+ userId))
-                );
+        return userRepository.findById( userId )
+                .flatMapMany( user -> repository.findByUserId( user.getId() ) )
+                .switchIfEmpty( Mono.error(new CustomException( HttpStatus.NOT_FOUND ,"User not found with id "+ userId)) );
     }
 
     public Mono<ResponseDTO> delete(String noteId){
-        Mono<Boolean> existsNote = repository.existsById(noteId);
-        return existsNote.flatMap( exists ->
-                exists
-                ? repository.deleteById(noteId).then( Mono.just(new ResponseDTO("Note delete successfully", null) ))
-                : Mono.error(new CustomException( HttpStatus.NOT_FOUND, "Note not found with id "+ noteId))
-        );
+        return repository.findById( noteId )
+                .flatMap( note -> repository.deleteById( note.getId() ).then( Mono.just( new ResponseDTO("Note deleted successfully", null) ) ) )
+                .switchIfEmpty( Mono.error(new CustomException( HttpStatus.NOT_FOUND ,"Note not found with id "+ noteId)) );
     }
 
 }
